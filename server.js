@@ -37,7 +37,7 @@ app.get('/todos', function(req, res) {
         //     return todo.description.toLowerCase().indexOf(queryParams.q.toLowerCase()) >= 0;
         // });
         where.description = {
-            $like: '%' = query.q + '%'
+            $like: '%' + query.q + '%'
         };
     }
 
@@ -46,7 +46,6 @@ app.get('/todos', function(req, res) {
     }, function (e) {
         res.status(500).send();
     });
-    // res.json(filteredTodos);
 });
 
 // GET /todos/:id
@@ -54,7 +53,7 @@ app.get('/todos/:id', function (req, res) {
     var todoId = parseInt(req.params.id, 10);
 
     db.todo.findById(todoId).then(function (todo) {
-        if (!!todo) { //an empty object is truthy
+        if (!!todo) { //an empty object is truthy, nil is falsy
             res.json(todo.toJSON());
         } else {
             res.status(404).send();
