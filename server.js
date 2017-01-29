@@ -2,6 +2,7 @@ var express = require('express');
 var bodyParser = require('body-parser');
 var _ = require('underscore'); //refactors logic so we don't have to do any looping
 var db = require('./db.js');
+var bcrypt = require('bcrypt');
 
 var app = express();
 var PORT = process.env.PORT || 3000;
@@ -160,11 +161,24 @@ app.post('/users', function (req, res) {
     var body = req.body;
 
     db.user.create(body).then(function (user) {
-        res.json(user.toJSON());
+        res.json(user.toPublicJSON());
     }, function (e) {
         res.status(400).json(e);
     });
 })
+
+// POST /users/login (example of custom actions)
+app.post('/users/login', function (req, res) {
+    var body = req.body;
+
+    db.user.authenticate(body).then(function (user) {
+        res.json(user.toPublicJSON());
+    }, function () {
+        res.status(401).send();
+    });
+    
+    res.json(body);
+});
 
 db.sequelize.sync().then(function () {
     app.listen(PORT, function() {

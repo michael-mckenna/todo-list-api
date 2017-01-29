@@ -1,5 +1,8 @@
+var bcrypt = require('bcrypt');
+var _ = require('underscore');
+
 module.exports = function (sequelize, DataTypes) {
-    return sequelize.define('user', {
+    var user = sequelize.define('user', {
         email: {
             type: DataTypes.STRING,
             allowNull: false,
@@ -8,11 +11,25 @@ module.exports = function (sequelize, DataTypes) {
                 isEmail: true
             }
         },
+        salt: {
+            type: DataTypes.STRING
+        },
+        password_hash: {
+            type: DataTypes.STRING
+        },
         password: {
-            type: DataTypes.STRING,
+            type: DataTypes.VIRTUAL, //doesn't get stored in database but is accessible
             allowNull: false,
             validate: {
                 len: [7, 100]
+            },
+            set: function (value) {
+                var salt = bcrypt.genSaltSync(10);
+                var hashedPassword = bcrypt.hashSync(value, salt);
+
+                this.setDataValue('password', value);
+                this.setDataValue('salt', salt);
+                this.setDataValue('password_hash', hashedPassword);
             }
         }
     }, {
@@ -22,6 +39,38 @@ module.exports = function (sequelize, DataTypes) {
                     user.email = user.email.toLowerCase();
                 }
             }
+        },
+        classMethods: {
+            authenticate: function (body) {
+                return new Promise(function(resolve, reject) {
+
+                    if (typeof body.email !== 'string' || typeof body.password !== 'string') {
+                        return reject();
+                    }
+
+                    user.findOne({
+                        where: {
+                            email: body.email
+                        }
+                    }).then(function (user) {
+                        if (!user || !bcrypt.compareSync(body.password, user.get('password_hash'))) {
+                            return res.status(401).send(); //authnetication is possible but failed
+                        }
+
+                        resolve(user.toPublicJSON());
+                        res.json(user.toPublicJSON());
+                    }, function (e) {
+                        reject();
+                    });
+                })
+            }
+        },
+        instanceMethods: {
+            toPublicJSON: function () {
+                var json = this.toJSON();
+                return _.pick(json, 'id', 'email', 'createdAt', 'updatedAt'); //prevents password from being displayed in json
+            }
         }
     });
+    return user;
 };
