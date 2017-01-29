@@ -8,9 +8,6 @@ var PORT = process.env.PORT || 3000;
 
 app.use(bodyParser.json());
 
-var todoNextId = 1;
-var todos = [];
-
 /*debugger; used for debugging as a breakpoint
   - must call node debug server.js
   - call cont to continue in terminal
@@ -24,15 +21,15 @@ app.get('/todos', function(req, res) {
     var query = req.query;
     var where = {};
 
-    if (queryParams.hasOwnProperty('completed') && queryParams.completed === 'true') {
+    if (query.hasOwnProperty('completed') && query.completed === 'true') {
         // filteredTodos = _.where(todos, {completed: true});
         where.completed = true;
-    } else if (queryParams.hasOwnProperty('completed') && queryParams.completed === 'false') {
+    } else if (query.hasOwnProperty('completed') && query.completed === 'false') {
         // filteredTodos = _.where(todos, {completed: false});
         where.completed = false;
     }
 
-    if (queryParams.hasOwnProperty('q') && queryParams.q.length > 0) {
+    if (query.hasOwnProperty('q') && query.q.length > 0) {
         // filteredTodos = _.filter(filteredTodos, function (todo) {
         //     return todo.description.toLowerCase().indexOf(queryParams.q.toLowerCase()) >= 0;
         // });
