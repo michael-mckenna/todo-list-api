@@ -1,5 +1,7 @@
 var bcrypt = require('bcrypt');
 var _ = require('underscore');
+var cryptojs = require('crypto-js');
+var jwt = require('jsonwebtoken');
 
 module.exports = function (sequelize, DataTypes) {
     var user = sequelize.define('user', {
@@ -54,21 +56,63 @@ module.exports = function (sequelize, DataTypes) {
                         }
                     }).then(function (user) {
                         if (!user || !bcrypt.compareSync(body.password, user.get('password_hash'))) {
-                            return res.status(401).send(); //authnetication is possible but failed
+                            return reject(); //authnetication is possible but failed
                         }
 
-                        resolve(user.toPublicJSON());
-                        res.json(user.toPublicJSON());
+                        resolve(user);
+                        // res.json(user.toPublicJSON());
                     }, function (e) {
                         reject();
                     });
-                })
+                });
+            },
+            findByToken: function (token) {
+                return new Promise(function (resolve, reject) {
+                    try {
+                        var decodedJWT = jwt.verify(token, 'qwerty098'); //verifies that a token hasn't been modified and that it is indeed valid
+                        var bytes = cryptojs.AES.decrypt(decodedJWT.token, 'abc123!@#!');
+                        var tokenData = JSON.parse(bytes.toString(cryptojs.enc.Utf8));
+
+                        user.findById(tokenData.id).then(function (user) {
+                            if (user) {
+                                resolve(user);
+                            } else {
+                                reject();
+                            }
+                        }), function (e) {
+                            reject();
+                        }
+                    } catch (e) {
+                        reject(); //cancels middleware and private code doesn't run
+                    }
+                });
             }
         },
         instanceMethods: {
             toPublicJSON: function () {
                 var json = this.toJSON();
                 return _.pick(json, 'id', 'email', 'createdAt', 'updatedAt'); //prevents password from being displayed in json
+            },
+            generateToken: function (type) {
+                if (!_.isString(type)) {
+                    return undefined;
+                }
+
+                try {
+                    var stringData = JSON.stringify({
+						id: this.get('id'),
+						type: type
+					});
+                    var encryptedData = cryptojs.AES.encrypt(stringData, 'abc123!@#!').toString();
+                    var token = jwt.sign({
+                        token: encryptedData
+                    }, 'qwerty098');
+
+                    return token;
+                } catch (e) {
+                    console.error(e);
+                    return undefined;
+                }
             }
         }
     });

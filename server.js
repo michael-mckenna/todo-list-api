@@ -3,6 +3,7 @@ var bodyParser = require('body-parser');
 var _ = require('underscore'); //refactors logic so we don't have to do any looping
 var db = require('./db.js');
 var bcrypt = require('bcrypt');
+var middleware = require('./middleware.js')(db);
 
 var app = express();
 var PORT = process.env.PORT || 3000;
@@ -18,9 +19,11 @@ app.get('/', function (req, res) {
 });
 
 // GET /todos?completed:true&q=work
-app.get('/todos', function(req, res) {
+app.get('/todos', middleware.requireAuthentication, function (req, res) {
     var query = req.query;
-    var where = {};
+    var where = {
+        userId: req.user.get('id')
+    };
 
     if (query.hasOwnProperty('completed') && query.completed === 'true') {
         // filteredTodos = _.where(todos, {completed: true});
@@ -47,10 +50,15 @@ app.get('/todos', function(req, res) {
 });
 
 // GET /todos/:id
-app.get('/todos/:id', function (req, res) {
+app.get('/todos/:id', middleware.requireAuthentication, function (req, res) {
     var todoId = parseInt(req.params.id, 10);
 
-    db.todo.findById(todoId).then(function (todo) {
+    db.todo.findOne({
+        where : {
+            id: todoId,
+            userId: req.user.get('id')
+        }
+    }).then(function (todo) {
         if (!!todo) { //an empty object is truthy, nil is falsy
             res.json(todo.toJSON());
         } else {
@@ -72,7 +80,7 @@ app.get('/todos/:id', function (req, res) {
 });
 
 // POST /todos
-app.post('/todos', function (req, res) {
+app.post('/todos', middleware.requireAuthentication, function (req, res) {
     var body = req.body;
     //
     // //completed must be bool, description must be string
@@ -87,20 +95,28 @@ app.post('/todos', function (req, res) {
     //
     // res.json(body);
     db.todo.create(body).then(function (todo) {
-        res.json(todo.toJSON());
+        //res.json(todo.toJSON());
+        req.user.addTodo(todo).then(function () {
+            //call reload updates the userId property on the todo object
+            //if we leave off reload, a call to the userId property will be null
+            return todo.reload();
+        }).then(function (todo) {
+            res.json(todo.toJSON());
+        });
     }, function (e) {
         res.status(400).json(e);
     });
 });
 
 // DELETE /todos/:id
-app.delete('/todos/:id', function (req, res) {
+app.delete('/todos/:id', middleware.requireAuthentication, function (req, res) {
     var id = parseInt(req.params.id, 10);
     // var matchedTodo = _.findWhere(todos, {id: id});
 
     db.todo.destroy({
         where: {
-            id: id
+            id: id,
+            userId: req.user.get('id')
         }
     }).then(function (rowsDeleted) {
         if (rowsDeleted == 0) {
@@ -122,7 +138,7 @@ app.delete('/todos/:id', function (req, res) {
 });
 
 // PUT /todos/:id
-app.put('/todos/:id', function (req, res) {
+app.put('/todos/:id', middleware.requireAuthentication, function (req, res) {
     var id = parseInt(req.params.id, 10);
     // var matchedTodo = _.findWhere(todos, {id: id});
     var attributes = {};
@@ -140,7 +156,12 @@ app.put('/todos/:id', function (req, res) {
         attributes.description = body.description;
     }
 
-    db.todo.findById(id).then(function (todo) {
+    db.todo.findOne({
+        where: {
+            id: id,
+            userId: req.user.get('id')
+        }
+    }).then(function (todo) {
         if (todo) {
             todo.update(attributes).then(function (todo) {
                 res.json(todo.toJSON());
@@ -172,12 +193,16 @@ app.post('/users/login', function (req, res) {
     var body = req.body;
 
     db.user.authenticate(body).then(function (user) {
-        res.json(user.toPublicJSON());
+        var token = user.generateToken('authentication');
+
+        if (token) {
+            res.header('Auth', token).json(user.toPublicJSON());
+        } else {
+            res.status(401).send();
+        }
     }, function () {
         res.status(401).send();
     });
-    
-    res.json(body);
 });
 
 db.sequelize.sync().then(function () {
